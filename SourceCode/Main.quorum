@@ -1,0 +1,335 @@
+use Libraries.Game.Game
+use Libraries.Game.Graphics.Drawable
+use Libraries.Game.Graphics.Label
+use Libraries.Game.Layer2D
+use Libraries.Compute.Vector2
+use Libraries.Interface.Events.KeyboardListener
+use Libraries.Interface.Events.KeyboardEvent
+use Libraries.Sound.Audio
+use Libraries.Containers.Array
+use Libraries.Game.Graphics.Color
+use Libraries.Interface.Events.CollisionListener2D
+use Libraries.Interface.Events.CollisionEvent2D
+use Libraries.Interface.Item2D
+use Libraries.Compute.Random
+use Libraries.Data.Formats.JavaScriptObjectNotation
+
+/*
+    This is a default class for creating a game in Quorum. Note that the Main 
+    action begins by calling StartGame(), which loads a window a game can 
+    be displayed in. The action CreateGame is where the game should load any 
+    assets, like images to be displayed, frames of animation, or sounds to be
+    played. 
+*/
+class Main is Game, KeyboardListener, CollisionListener2D
+    number totalSeconds = 0.0
+    number nextMoveSecs = 5.0
+    integer shipsRemainingInt = 3
+    Label shipsRemainingLabel
+    Drawable player
+    boolean leftDown = false
+    boolean rightDown = false
+    Array<Drawable> rowOne
+    Array<Drawable> rowTwo
+    Array<Drawable> rowThree
+    Array<Layer2D> layers
+    
+    action Main
+        StartGame()
+    end
+
+    /*
+        This action sets up the default values for a game. For example, we might
+        use the Libraries.Game.Graphics.Drawable class to load up an image or 
+        a shape. Or, we might add a Libraries.Interface.Button for making something clickable
+        or a Libraries.Interface.TextBox for gathering user input in a game.
+    */
+    action CreateGame
+        EnablePhysics2D(true)
+        JavaScriptObjectNotation json
+        json:Add("data", true) 
+
+        Layer2D background
+        background:SetName("background")
+        AddLayer(background)
+        Layer2D foreground
+        foreground:EnablePhysics(true)
+        foreground:AddCollisionListener(me)
+
+        foreground:SetName("foreground")
+        AddLayer(foreground)
+        layers:Add(background)
+        layers:Add(foreground)
+        
+        Drawable backgroundImage
+        backgroundImage:Load("assets/spacebg.png")
+        background:Add(backgroundImage)
+
+        Color color
+        color:SetColor(255, 255, 255, 255)
+        shipsRemainingLabel:SetText("Ships Remaining: " + shipsRemainingInt)
+        shipsRemainingLabel:SetFontSize(24)   
+        shipsRemainingLabel:SetFontColor(color)   
+        shipsRemainingLabel:SetPosition(50, 550)
+        foreground:Add(shipsRemainingLabel)
+        
+        integer xPos = 25
+        repeat 10 times
+            CreateEnemyForRow(foreground, json, rowThree, "assets/spaceship.png",
+                                xPos, 500)
+            CreateEnemyForRow(foreground, json, rowTwo, "assets/spaceship5.png",
+                                xPos, 450)
+            CreateEnemyForRow(foreground, json, rowOne, "assets/spaceship7.png",
+                                xPos, 400)
+            xPos = xPos + 75
+        end
+
+        player:Load("assets/spaceship4.png")  
+        foreground:Add(player)    
+        player:SetPosition(50, 50)
+        player:SetCollidable(true)
+        player:SetName("player")
+       
+        AddKeyboardListener(me)
+        AddCollisionListener(me)
+    end
+
+    action CreateEnemyForRow(Layer2D layer, JavaScriptObjectNotation json, Array<Drawable> enemyRow,
+                        text iconPath, integer xPos, integer yPos) returns Array<Drawable>
+            Drawable enemy
+            enemy:Load(iconPath)  
+            enemy:SetPosition(xPos, yPos)
+            enemy:SetCollidable(true)
+            enemy:SetName("enemy")
+            enemy:SetProperty("active", json)
+            layer:Add(enemy)
+            enemyRow:Add(enemy)
+        return enemyRow
+    end
+
+   /*
+   This is the action that gets called automatically by the game engine when
+   a collision begins between two collidable items. We are passed an item
+   that represents the event of the collision. From that item we can get the
+   items that are colliding.
+   */
+   action BeginCollision(CollisionEvent2D event)
+
+       // Next, we want to get our items out of the collision event
+       Drawable itemA = cast(Drawable, event:GetItemA())
+       Drawable itemB = cast(Drawable, event:GetItemB())
+       Layer2D foreground = layers:Get(1)
+       
+       if itemA:GetName() = "enemy" and itemB:GetName() = "projectile"
+            or itemA:GetName() = "projectile" and itemB:GetName() = "enemy"
+            
+            foreground:Remove(itemA)
+            foreground:Remove(itemB)
+            JavaScriptObjectNotation json
+            json:Add("data", false) 
+            itemA:SetProperty("active", json)
+            itemB:SetProperty("active", json)
+       elseif itemA:GetName() = "player" and itemB:GetName() = "projectile"
+            foreground:Remove(itemB)
+            shipsRemainingInt = shipsRemainingInt - 1
+            shipsRemainingLabel:SetText("Ships Remaining: " + shipsRemainingInt)
+       elseif itemA:GetName() = "projectile" and itemB:GetName() = "player"
+            foreground:Remove(itemA)
+            shipsRemainingInt = shipsRemainingInt - 1
+            shipsRemainingLabel:SetText("Ships Remaining: " + shipsRemainingInt)
+       elseif itemA:GetName() = "projectile" and itemB:GetName() = "projectile"
+            foreground:Remove(itemA)
+            foreground:Remove(itemB)
+       end
+   end
+
+    action PressedKey(KeyboardEvent event)
+        if event:keyCode = event:A
+            rightDown = true
+        end
+
+        if event:keyCode = event:D
+            leftDown = true
+        end
+
+        if event:keyCode = event:SPACE
+            number xPos = player:GetCenterX()
+            number yPos = player:GetY()
+            Vector2 vector
+            vector:Set(0, 200)
+            Drawable projectile
+            projectile:LoadFilledRectangle(5, 25)
+            projectile:SetColor(255, 0, 0, 255)
+            projectile:EnablePhysics(true)
+            projectile:SetResponsive()
+            projectile:SetName("projectile")
+        
+            projectile:SetPosition(xPos, yPos + 75)
+            Layer2D foreground = layers:Get(1)
+            foreground:Add(projectile)
+            projectile:SetLinearVelocity(vector)            
+            spaceDown = true
+        end
+    end
+
+   action ReleasedKey(KeyboardEvent event)
+       
+        if event:keyCode = event:A
+            rightDown = false
+        end
+
+        if event:keyCode = event:D
+            leftDown = false
+        end
+
+   end
+
+    action MoveRows()
+        MoveSingleRowDown(rowOne)
+        MoveSingleRowDown(rowTwo)
+        MoveSingleRowDown(rowThree)
+    end
+
+    action MoveSingleRowDown(Array<Drawable> enemyRow)
+        integer index = 0
+        repeat enemyRow:GetSize() times
+            Drawable enemy = enemyRow:Get(index)
+            number yPos = enemy:GetY()
+            yPos = yPos - 50
+            enemy:SetY(yPos)
+
+            index = index + 1
+        end
+    end
+
+    action EnemyShoot(Array<Drawable> enemyRow, Array<Drawable> enemyRowBelow, Random random, boolean hasMoved)
+        JavaScriptObjectNotation json        
+
+        integer index = 0
+        repeat enemyRow:GetSize() times
+            Drawable currentEnemy = enemyRow:Get(index)
+            number xPos = currentEnemy:GetCenterX()
+            number yPos = currentEnemy:GetY()
+            integer randomNum = random:RandomIntegerBetween(0, 250)
+            boolean isEnemyBelow = false
+
+            if enemyRowBelow not= undefined
+                Drawable enemyBelow = enemyRowBelow:Get(index)
+                JavaScriptObjectNotation enemyBelowActive = enemyBelow:GetProperty("active")
+                text isEnemyBelowActiveText = enemyBelowActive:GetValue("data")
+                isEnemyBelow = cast(boolean, isEnemyBelowActiveText)
+            end
+            
+            if randomNum = 0 and not hasMoved and not isEnemyBelow
+
+                JavaScriptObjectNotation enemyActive = currentEnemy:GetProperty("active")
+                
+                text isEnemyActiveText = enemyActive:GetValue("data")
+                boolean isEnemyActive = cast(boolean, isEnemyActiveText)
+                
+                if isEnemyActive                    
+                    Vector2 vector
+                    vector:Set(0, -100)
+                    Drawable projectile
+                    projectile:LoadFilledRectangle(5, 25)
+                    projectile:SetColor(255, 0, 0, 255)
+                    projectile:EnablePhysics(true)
+                    projectile:SetResponsive()
+                    projectile:SetName("projectile")
+        
+                    projectile:SetPosition(xPos, yPos - 55)
+                    Layer2D foreground = layers:Get(1)
+                    foreground:Add(projectile)
+                    projectile:SetLinearVelocity(vector)    
+                end
+
+            end
+        
+            index = index + 1
+        end
+    end
+
+    action CheckIfRowAllInactive(Array<Drawable> enemyRow) returns boolean
+        boolean isRowAllInactive = true
+        integer index = 0
+        repeat enemyRow:GetSize() times
+            Drawable enemy = enemyRow:Get(index)
+            JavaScriptObjectNotation enemyActive = enemy:GetProperty("active")
+            text isEnemyActiveText = enemyActive:GetValue("data")
+            boolean isEnemyActive = cast(boolean, isEnemyActiveText)
+
+            if isEnemyActive
+                isRowAllInactive = false
+            end
+
+            index = index + 1
+        end
+
+        return isRowAllInactive
+    end
+
+    action SetAllEnemiesInRowActive(Array<Drawable> enemyRow, integer yPos)
+        JavaScriptObjectNotation json
+        json:Add("data", true) 
+        
+        integer index = 0
+        repeat enemyRow:GetSize() times
+            Drawable enemy = enemyRow:Get(index)
+            number xPos = enemy:GetX()
+            enemy:SetProperty("active", json)
+            enemy:SetPosition(xPos, yPos)
+            enemy:SetCollidable(true)
+            Layer2D foreground = layers:Get(1)
+            foreground:Add(enemy) 
+            index = index + 1
+        end
+    end
+
+    /*
+        The update action is called on every "frame" of animation in a game. This
+        action should be used to do operations on items. So, for example, we 
+        might use this action to change frames of animation, to rotate items, 
+        or to make creatures jump.
+    */
+    action Update(number seconds)
+        Random random
+        boolean hasMoved = false
+
+        if CheckIfRowAllInactive(rowOne) and CheckIfRowAllInactive(rowTwo)
+            and CheckIfRowAllInactive(rowThree)
+            SetAllEnemiesInRowActive(rowOne, 400)
+            SetAllEnemiesInRowActive(rowTwo, 450)
+            SetAllEnemiesInRowActive(rowThree, 500)
+        end
+
+        if shipsRemainingInt = 0
+            Exit()
+        end
+
+        totalSeconds = totalSeconds + seconds
+
+        if totalSeconds >= nextMoveSecs
+            MoveRows()
+            hasMoved = true
+            nextMoveSecs = nextMoveSecs + 5
+        end
+        
+        if (nextMoveSecs - totalSeconds) >= 1 and not hasMoved
+            EnemyShoot(rowOne, undefined, random, hasMoved)
+            EnemyShoot(rowTwo, rowOne, random, hasMoved)
+            EnemyShoot(rowThree, rowTwo, random, hasMoved)
+        end
+
+        if leftDown
+            number rectX = player:GetX()
+            rectX = rectX + 4
+            player:SetX(rectX)
+        end
+
+        if rightDown
+            number rectX = player:GetX()
+            rectX = rectX - 4
+            player:SetX(rectX)
+        end
+    end
+end
