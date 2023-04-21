@@ -14,6 +14,15 @@ use Libraries.Interface.Item2D
 use Libraries.Compute.Random
 use Libraries.Data.Formats.JavaScriptObjectNotation
 
+// Add increasing speed of shooting with new waves
+// Add increasing row movement speed with new waves
+// Add Left right moving space ship
+// Add Limit player to two shots on screen at once
+// Add Game Over if enemies reach bottom of screen
+// Add Left and Right barriers to stop player from moving off of screen
+// Add Shooting sounds
+// Add background sound?
+
 /*
     This is a default class for creating a game in Quorum. Note that the Main 
     action begins by calling StartGame(), which loads a window a game can 
@@ -26,9 +35,14 @@ class Main is Game, KeyboardListener, CollisionListener2D
     number nextMoveSecs = 5.0
     integer shipsRemainingInt = 3
     Label shipsRemainingLabel
+    integer scoreInt = 0
+    integer activePlayerProjectileCount = 0
+    Label scoreLabel
     Drawable player
     boolean leftDown = false
     boolean rightDown = false
+    boolean gameOver = false
+    boolean instructionsShown = false
     Array<Drawable> rowOne
     Array<Drawable> rowTwo
     Array<Drawable> rowThree
@@ -46,8 +60,6 @@ class Main is Game, KeyboardListener, CollisionListener2D
     */
     action CreateGame
         EnablePhysics2D(true)
-        JavaScriptObjectNotation json
-        json:Add("data", true) 
 
         Layer2D background
         background:SetName("background")
@@ -64,7 +76,18 @@ class Main is Game, KeyboardListener, CollisionListener2D
         Drawable backgroundImage
         backgroundImage:Load("assets/spacebg.png")
         background:Add(backgroundImage)
+        
+        ShowInstructions()
 
+        AddKeyboardListener(me)
+        AddCollisionListener(me)
+    end
+
+    action SetupBoard()
+        JavaScriptObjectNotation json
+        json:Add("data", true)
+
+        Layer2D foreground = layers:Get(1)
         Color color
         color:SetColor(255, 255, 255, 255)
         shipsRemainingLabel:SetText("Ships Remaining: " + shipsRemainingInt)
@@ -72,6 +95,12 @@ class Main is Game, KeyboardListener, CollisionListener2D
         shipsRemainingLabel:SetFontColor(color)   
         shipsRemainingLabel:SetPosition(50, 550)
         foreground:Add(shipsRemainingLabel)
+
+        scoreLabel:SetText("Score: " + scoreInt)
+        scoreLabel:SetFontSize(24)   
+        scoreLabel:SetFontColor(color)   
+        scoreLabel:SetPosition(600, 550)
+        foreground:Add(scoreLabel)
         
         integer xPos = 25
         repeat 10 times
@@ -89,9 +118,77 @@ class Main is Game, KeyboardListener, CollisionListener2D
         player:SetPosition(50, 50)
         player:SetCollidable(true)
         player:SetName("player")
-       
-        AddKeyboardListener(me)
-        AddCollisionListener(me)
+
+        CreateBarrier(50)
+        CreateBarrier(350)
+        CreateBarrier(650)
+        CreateInvisibleBarrier(0)
+    end
+
+    action ShowInstructions()
+        Layer2D foreground = layers:Get(1)
+        Label nameLabel
+        Color whiteColor
+        whiteColor:SetColor(255, 255, 255, 255)
+
+        Color goldColor
+        goldColor:SetColor(215, 215, 0, 255)
+
+        nameLabel:SetText("Quorum Invaders")
+        nameLabel:SetName("nameLabel")
+        nameLabel:SetFontSize(36)
+        nameLabel:SetFontColor(goldColor)   
+        nameLabel:SetPosition(150, 400)
+        foreground:Add(nameLabel)
+
+        Label instructionsLabel
+        instructionsLabel:SetText("Press A to move left, D to move right, and SPACE to fire.")
+        instructionsLabel:SetName("instructionsLabel")
+        instructionsLabel:SetFontSize(24)   
+        instructionsLabel:SetFontColor(whiteColor)   
+        instructionsLabel:SetPosition(150, 350)
+        foreground:Add(instructionsLabel)
+
+        Label instructionsTwoLabel
+        instructionsTwoLabel:SetText("Press SPACE to continue.")
+        instructionsTwoLabel:SetName("instructionsTwoLabel")
+        instructionsTwoLabel:SetFontSize(24)   
+        instructionsTwoLabel:SetFontColor(whiteColor)   
+        instructionsTwoLabel:SetPosition(150, 300)
+        foreground:Add(instructionsTwoLabel)
+        instructionsShown = true
+    end
+
+    action AddGameOver()
+        Layer2D foreground = layers:Get(1)
+        Label gameOverLabel
+        Color whiteColor
+        whiteColor:SetColor(255, 255, 255, 255)
+
+        gameOverLabel:SetText("Game OVer!")
+        gameOverLabel:SetName("gameOverOneLabel")
+        gameOverLabel:SetFontSize(36)
+        gameOverLabel:SetFontColor(whiteColor)   
+        gameOverLabel:SetPosition(150, 400)
+        foreground:Add(gameOverLabel)
+
+        gameOverLabel:SetText("Press R to restart or Q to quit.")
+        gameOverLabel:SetName("gameOverTwoLabel")
+        gameOverLabel:SetFontSize(36)
+        gameOverLabel:SetFontColor(whiteColor)   
+        gameOverLabel:SetPosition(150, 350)
+        foreground:Add(gameOverLabel)
+        gameOver = true
+    end
+
+    action ClearForeground()
+        Layer2D foreground = layers:Get(1)
+        
+        integer i = 0
+
+        repeat while foreground:GetSize() > 0
+            foreground:RemoveFromEnd()
+        end
     end
 
     action CreateEnemyForRow(Layer2D layer, JavaScriptObjectNotation json, Array<Drawable> enemyRow,
@@ -100,6 +197,8 @@ class Main is Game, KeyboardListener, CollisionListener2D
             enemy:Load(iconPath)  
             enemy:SetPosition(xPos, yPos)
             enemy:SetCollidable(true)
+            enemy:Scale(0.75)
+            enemy:SetRotation(180)
             enemy:SetName("enemy")
             enemy:SetProperty("active", json)
             layer:Add(enemy)
@@ -120,15 +219,17 @@ class Main is Game, KeyboardListener, CollisionListener2D
        Drawable itemB = cast(Drawable, event:GetItemB())
        Layer2D foreground = layers:Get(1)
        
-       if itemA:GetName() = "enemy" and itemB:GetName() = "projectile"
-            or itemA:GetName() = "projectile" and itemB:GetName() = "enemy"
-            
+       if itemA:GetName() = "enemy" and itemB:GetName() = "playerProjectile"
+            or itemA:GetName() = "playerProjectile" and itemB:GetName() = "enemy"
             foreground:Remove(itemA)
             foreground:Remove(itemB)
             JavaScriptObjectNotation json
             json:Add("data", false) 
             itemA:SetProperty("active", json)
             itemB:SetProperty("active", json)
+            activePlayerProjectileCount = activePlayerProjectileCount - 1
+            scoreInt = scoreInt + 10
+            scoreLabel:SetText("Score: " + scoreInt)
        elseif itemA:GetName() = "player" and itemB:GetName() = "projectile"
             foreground:Remove(itemB)
             shipsRemainingInt = shipsRemainingInt - 1
@@ -137,22 +238,172 @@ class Main is Game, KeyboardListener, CollisionListener2D
             foreground:Remove(itemA)
             shipsRemainingInt = shipsRemainingInt - 1
             shipsRemainingLabel:SetText("Ships Remaining: " + shipsRemainingInt)
-       elseif itemA:GetName() = "projectile" and itemB:GetName() = "projectile"
+       elseif itemA:GetName() = "projectile" and itemB:GetName() = "playerProjectile"
+            or itemA:GetName() = "playerProjectile" and itemB:GetName() = "projectile"
             foreground:Remove(itemA)
             foreground:Remove(itemB)
+            activePlayerProjectileCount = activePlayerProjectileCount - 1
+       elseif itemA:GetName() = "enemy" and itemB:GetName() = "player"
+            or itemA:GetName() = "player" and itemB:GetName() = "enemy"
+            foreground:Remove(itemA)
+            foreground:Remove(itemB)
+            shipsRemainingInt = shipsRemainingInt - 1
+            shipsRemainingLabel:SetText("Ships Remaining: " + shipsRemainingInt)
+       elseif itemA:GetName() = "barrier" and itemB:GetName() = "projectile" or
+            itemA:GetName() = "projectile" and itemB:GetName() = "barrier" 
+            foreground:Remove(itemA)
+            foreground:Remove(itemB)
+       elseif itemA:GetName() = "barrier" and itemB:GetName() = "playerProjectile" or
+            itemA:GetName() = "playerProjectile" and itemB:GetName() = "barrier"
+            foreground:Remove(itemA)
+            foreground:Remove(itemB)
+            activePlayerProjectileCount = activePlayerProjectileCount - 1
+       elseif itemA:GetName() = "enemy" and itemB:GetName() = "barrier"
+            foreground:Remove(itemB)    
+       elseif itemA:GetName() = "barrier" and itemB:GetName() = "enemy"
+            foreground:Remove(itemA)
+       elseif itemA:GetName() = "invisibleBarrier" and itemB:GetName() = "projectile" 
+            foreground:Remove(itemB)
+       elseif itemA:GetName() = "projectile" and itemB:GetName() = "invisibleBarrier"
+            foreground:Remove(itemA)
+       elseif itemA:GetName() = "invisibleBarrier" and itemB:GetName() = "playerProjectile" 
+            foreground:Remove(itemB)
+            activePlayerProjectileCount = activePlayerProjectileCount - 1
+       elseif itemA:GetName() = "playerProjectile" and itemB:GetName() = "invisibleBarrier"
+            foreground:Remove(itemA)
+            activePlayerProjectileCount = activePlayerProjectileCount - 1    
        end
-   end
+    end
+
+    action CreateBarrier(integer xPos)
+        Layer2D foreground = layers:Get(1)
+
+        integer yPos = 225
+        integer xTemp = xPos
+
+        barrierWidth = 3
+        barrierOffset = xPos + 35
+
+        repeat 8 times
+            xTemp = barrierOffset                                  
+            repeat barrierWidth times
+                Drawable square = CreateBarrierBlock(xTemp, yPos)
+                foreground:Add(square)
+                xTemp = xTemp + 5 
+            end
+            barrierOffset = barrierOffset - 5
+            yPos = yPos - 5
+            barrierWidth = barrierWidth + 2
+        end
+ 
+    end
+
+    action CreateBarrierBlock(integer xPos, integer yPos) returns Drawable
+        Color whiteColor
+        whiteColor:SetColor(255, 255, 255, 255)        
+
+        Drawable square
+        square:LoadFilledRectangle(5, 5, whiteColor)
+        square:SetPosition(xPos, yPos)
+        square:SetCollidable(true)
+        square:SetName("barrier")
+        return square
+    end
+
+
+    action CreateInvisibleBarrier(integer xPos)
+        Layer2D foreground = layers:Get(1)
+
+        // Create Top Invisible Barrier
+        integer x = 0
+        integer y = 600
+        repeat 800 times
+            Drawable square = CreateInvisibleBlock(x, y)
+            foreground:Add(square)
+            x = x + 1
+        end
+
+        // Create Bottom Invisible Barrier
+        x = 0
+        y = 0
+        repeat 800 times
+            Drawable square = CreateInvisibleBlock(x, y)
+            foreground:Add(square)
+            x = x + 1
+        end
+
+        // Create Left Invisible Barrier
+        x = 0
+        y = 0
+        repeat 600 times
+            Drawable square = CreateInvisibleBlock(x, y)
+            foreground:Add(square)
+            y = y + 1
+        end
+
+        // Create Right Invisible Barrier
+        x = 800
+        y = 0
+        repeat 600 times
+            Drawable square = CreateInvisibleBlock(x, y)
+            foreground:Add(square)
+            y = y + 1
+        end
+
+    end
+
+    action CreateInvisibleBlock(integer xPos, integer yPos) returns Drawable
+        Color yellowColor
+        yellowColor:SetColor(255, 255, 0, 255)        
+
+        Drawable square
+        square:LoadFilledRectangle(5, 5, yellowColor)
+        square:SetPosition(xPos, yPos)
+        square:SetCollidable(true)
+        square:SetName("invisibleBarrier")
+        return square
+    end
+   
+    action ClearEnemyRows()
+        repeat while rowOne:GetSize() > 0
+            rowOne:RemoveFromEnd()
+        end
+
+        repeat while rowTwo:GetSize() > 0
+            rowTwo:RemoveFromEnd()
+        end
+
+        repeat while rowThree:GetSize() > 0
+            rowThree:RemoveFromEnd()
+        end
+    end
 
     action PressedKey(KeyboardEvent event)
         if event:keyCode = event:A
-            rightDown = true
-        end
-
-        if event:keyCode = event:D
             leftDown = true
         end
 
-        if event:keyCode = event:SPACE
+        if event:keyCode = event:D
+            rightDown = true
+        end
+
+        if event:keyCode = event:Q and gameOver
+            Exit()
+        end
+
+        if event:keyCode = event:SPACE and instructionsShown
+            ClearForeground()
+            instructionsShown = false
+            SetupBoard()
+        elseif event:keyCode = event:R and gameOver
+            shipsRemainingInt = 3
+            scoreInt = 0
+            ClearEnemyRows()
+            ClearForeground()
+            gameOver = false
+            SetupBoard()
+        elseif event:keyCode = event:SPACE and not instructionsShown and not gameOver
+            and activePlayerProjectileCount < 2
             number xPos = player:GetCenterX()
             number yPos = player:GetY()
             Vector2 vector
@@ -162,24 +413,26 @@ class Main is Game, KeyboardListener, CollisionListener2D
             projectile:SetColor(255, 0, 0, 255)
             projectile:EnablePhysics(true)
             projectile:SetResponsive()
-            projectile:SetName("projectile")
+            projectile:SetName("playerProjectile")
         
             projectile:SetPosition(xPos, yPos + 75)
             Layer2D foreground = layers:Get(1)
             foreground:Add(projectile)
-            projectile:SetLinearVelocity(vector)            
+            projectile:SetLinearVelocity(vector)
+            activePlayerProjectileCount = activePlayerProjectileCount + 1            
             spaceDown = true
         end
+
     end
 
    action ReleasedKey(KeyboardEvent event)
        
         if event:keyCode = event:A
-            rightDown = false
+            leftDown = false
         end
 
         if event:keyCode = event:D
-            leftDown = false
+            rightDown = false
         end
 
    end
@@ -302,31 +555,31 @@ class Main is Game, KeyboardListener, CollisionListener2D
             SetAllEnemiesInRowActive(rowThree, 500)
         end
 
-        if shipsRemainingInt = 0
-            Exit()
+        if shipsRemainingInt <= 0 and not gameOver
+            AddGameOver()
         end
 
         totalSeconds = totalSeconds + seconds
 
-        if totalSeconds >= nextMoveSecs
+        if totalSeconds >= nextMoveSecs and not gameOver
             MoveRows()
             hasMoved = true
             nextMoveSecs = nextMoveSecs + 5
         end
         
-        if (nextMoveSecs - totalSeconds) >= 1 and not hasMoved
+        if (nextMoveSecs - totalSeconds) >= 1 and not hasMoved and not gameOver
             EnemyShoot(rowOne, undefined, random, hasMoved)
             EnemyShoot(rowTwo, rowOne, random, hasMoved)
             EnemyShoot(rowThree, rowTwo, random, hasMoved)
         end
 
-        if leftDown
+        if rightDown and not gameOver and player:GetX() < 750
             number rectX = player:GetX()
             rectX = rectX + 4
             player:SetX(rectX)
         end
 
-        if rightDown
+        if leftDown and not gameOver and player:GetX() > 5
             number rectX = player:GetX()
             rectX = rectX - 4
             player:SetX(rectX)
