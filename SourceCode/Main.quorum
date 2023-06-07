@@ -13,15 +13,9 @@ use Libraries.Interface.Events.CollisionEvent2D
 use Libraries.Interface.Item2D
 use Libraries.Compute.Random
 use Libraries.Data.Formats.JavaScriptObjectNotation
-
-// Add increasing speed of shooting with new waves
-// Add increasing row movement speed with new waves
-// Add Left right moving space ship
-// Add Limit player to two shots on screen at once
-// Add Game Over if enemies reach bottom of screen
-// Add Left and Right barriers to stop player from moving off of screen
-// Add Shooting sounds
-// Add background sound?
+use Libraries.Sound.Audio
+use Libraries.System.File
+use Libraries.Game.Graphics.ImageSheet
 
 /*
     This is a default class for creating a game in Quorum. Note that the Main 
@@ -32,7 +26,9 @@ use Libraries.Data.Formats.JavaScriptObjectNotation
 */
 class Main is Game, KeyboardListener, CollisionListener2D
     number totalSeconds = 0.0
-    number nextMoveSecs = 5.0
+    number nextMoveSecs = 10.0
+    number explosionSecs = 0.0
+    boolean activeExplosion = false
     integer shipsRemainingInt = 3
     Label shipsRemainingLabel
     integer scoreInt = 0
@@ -47,7 +43,13 @@ class Main is Game, KeyboardListener, CollisionListener2D
     Array<Drawable> rowTwo
     Array<Drawable> rowThree
     Array<Layer2D> layers
-    
+    Audio laserAudio
+    File laserAudioFile
+    Audio explosionAudio
+    File explosionAudioFile
+    Audio bgMusicAudio
+    File bgMusicAudioFile
+
     action Main
         StartGame()
     end
@@ -74,9 +76,18 @@ class Main is Game, KeyboardListener, CollisionListener2D
         layers:Add(foreground)
         
         Drawable backgroundImage
-        backgroundImage:Load("assets/spacebg.png")
+        backgroundImage:Load("assets/starfield3.png")
         background:Add(backgroundImage)
-        
+        laserAudioFile:SetPath("assets/laser1.wav")
+        laserAudio:Load(laserAudioFile)
+        explosionAudioFile:SetPath("assets/explosion.wav")
+        explosionAudio:Load(explosionAudioFile)
+        bgMusicAudioFile:SetPath("assets/space-invaders.wav")
+        bgMusicAudio:Load(bgMusicAudioFile)
+        bgMusicAudio:SetVolume(0.5)
+        bgMusicAudio:EnableLooping()
+        bgMusicAudio:Play()
+
         ShowInstructions()
 
         AddKeyboardListener(me)
@@ -113,7 +124,7 @@ class Main is Game, KeyboardListener, CollisionListener2D
             xPos = xPos + 75
         end
 
-        player:Load("assets/spaceship4.png")  
+        player:Load("assets/Spaceship4.png")  
         foreground:Add(player)    
         player:SetPosition(50, 50)
         player:SetCollidable(true)
@@ -162,22 +173,23 @@ class Main is Game, KeyboardListener, CollisionListener2D
     action AddGameOver()
         Layer2D foreground = layers:Get(1)
         Label gameOverLabel
+        Label gameOverTwoLabel
         Color whiteColor
         whiteColor:SetColor(255, 255, 255, 255)
 
-        gameOverLabel:SetText("Game OVer!")
+        gameOverLabel:SetText("Game Over!")
         gameOverLabel:SetName("gameOverOneLabel")
         gameOverLabel:SetFontSize(36)
         gameOverLabel:SetFontColor(whiteColor)   
         gameOverLabel:SetPosition(150, 400)
         foreground:Add(gameOverLabel)
 
-        gameOverLabel:SetText("Press R to restart or Q to quit.")
-        gameOverLabel:SetName("gameOverTwoLabel")
-        gameOverLabel:SetFontSize(36)
-        gameOverLabel:SetFontColor(whiteColor)   
-        gameOverLabel:SetPosition(150, 350)
-        foreground:Add(gameOverLabel)
+        gameOverTwoLabel:SetText("Press R to restart or Q to quit.")
+        gameOverTwoLabel:SetName("gameOverTwoLabel")
+        gameOverTwoLabel:SetFontSize(36)
+        gameOverTwoLabel:SetFontColor(whiteColor)   
+        gameOverTwoLabel:SetPosition(150, 350)
+        foreground:Add(gameOverTwoLabel)
         gameOver = true
     end
 
@@ -193,6 +205,10 @@ class Main is Game, KeyboardListener, CollisionListener2D
 
     action CreateEnemyForRow(Layer2D layer, JavaScriptObjectNotation json, Array<Drawable> enemyRow,
                         text iconPath, integer xPos, integer yPos) returns Array<Drawable>
+            JavaScriptObjectNotation explodingJson
+            explodingJson:Add("data", false)
+            JavaScriptObjectNotation explodingTimeJson
+            explodingTimeJson:Add("data", 0.0)
             Drawable enemy
             enemy:Load(iconPath)  
             enemy:SetPosition(xPos, yPos)
@@ -201,6 +217,8 @@ class Main is Game, KeyboardListener, CollisionListener2D
             enemy:SetRotation(180)
             enemy:SetName("enemy")
             enemy:SetProperty("active", json)
+            enemy:SetProperty("exploding", explodingJson)
+            enemy:SetProperty("explodingTime", explodingTimeJson)
             layer:Add(enemy)
             enemyRow:Add(enemy)
         return enemyRow
@@ -220,35 +238,66 @@ class Main is Game, KeyboardListener, CollisionListener2D
        Layer2D foreground = layers:Get(1)
        
        if itemA:GetName() = "enemy" and itemB:GetName() = "playerProjectile"
-            or itemA:GetName() = "playerProjectile" and itemB:GetName() = "enemy"
-            foreground:Remove(itemA)
             foreground:Remove(itemB)
             JavaScriptObjectNotation json
             json:Add("data", false) 
             itemA:SetProperty("active", json)
             itemB:SetProperty("active", json)
+            JavaScriptObjectNotation enemyExplodingJson
+            enemyExplodingJson:Add("data", true)
+            itemA:SetProperty("exploding", enemyExplodingJson)
+            itemA:SetCollidable(false)
             activePlayerProjectileCount = activePlayerProjectileCount - 1
             scoreInt = scoreInt + 10
             scoreLabel:SetText("Score: " + scoreInt)
+            explosionAudio:Play()
+       elseif itemA:GetName() = "playerProjectile" and itemB:GetName() = "enemy"
+            foreground:Remove(itemA)
+            JavaScriptObjectNotation json
+            json:Add("data", false) 
+            itemA:SetProperty("active", json)
+            itemB:SetProperty("active", json)
+            JavaScriptObjectNotation enemyExplodingJson
+            enemyExplodingJson:Add("data", true)
+            itemB:SetProperty("exploding", enemyExplodingJson)
+            itemB:SetCollidable(false)
+            activePlayerProjectileCount = activePlayerProjectileCount - 1
+            scoreInt = scoreInt + 10
+            scoreLabel:SetText("Score: " + scoreInt)
+            explosionAudio:Play()
        elseif itemA:GetName() = "player" and itemB:GetName() = "projectile"
             foreground:Remove(itemB)
             shipsRemainingInt = shipsRemainingInt - 1
             shipsRemainingLabel:SetText("Ships Remaining: " + shipsRemainingInt)
+            explosionAudio:Play()
+            activeExplosion = true
+            explosionSecs = 0.0
        elseif itemA:GetName() = "projectile" and itemB:GetName() = "player"
             foreground:Remove(itemA)
             shipsRemainingInt = shipsRemainingInt - 1
             shipsRemainingLabel:SetText("Ships Remaining: " + shipsRemainingInt)
+            explosionAudio:Play()
+            activeExplosion = true
+            explosionSecs = 0.0
        elseif itemA:GetName() = "projectile" and itemB:GetName() = "playerProjectile"
             or itemA:GetName() = "playerProjectile" and itemB:GetName() = "projectile"
             foreground:Remove(itemA)
             foreground:Remove(itemB)
             activePlayerProjectileCount = activePlayerProjectileCount - 1
        elseif itemA:GetName() = "enemy" and itemB:GetName() = "player"
-            or itemA:GetName() = "player" and itemB:GetName() = "enemy"
             foreground:Remove(itemA)
+            shipsRemainingInt = shipsRemainingInt - 1
+            shipsRemainingLabel:SetText("Ships Remaining: " + shipsRemainingInt)
+            explosionAudio:Play()
+            activeExplosion = true
+            explosionSecs = 0.0
+       elseif itemA:GetName() = "player" and itemB:GetName() = "enemy"
             foreground:Remove(itemB)
             shipsRemainingInt = shipsRemainingInt - 1
             shipsRemainingLabel:SetText("Ships Remaining: " + shipsRemainingInt)
+            explosionAudio:Play()
+            activeExplosion = true
+            explosionSecs = 0.0
        elseif itemA:GetName() = "barrier" and itemB:GetName() = "projectile" or
             itemA:GetName() = "projectile" and itemB:GetName() = "barrier" 
             foreground:Remove(itemA)
@@ -269,6 +318,10 @@ class Main is Game, KeyboardListener, CollisionListener2D
        elseif itemA:GetName() = "invisibleBarrier" and itemB:GetName() = "playerProjectile" 
             foreground:Remove(itemB)
             activePlayerProjectileCount = activePlayerProjectileCount - 1
+       elseif itemA:GetName() = "invisibleBarrier" and itemB:GetName() = "enemy" 
+            or itemA:GetName() = "enemy" and itemB:GetName() = "invisibleBarrier" 
+            shipsRemainingInt = 0
+            shipsRemainingLabel:SetText("Ships Remaining: " + shipsRemainingInt)            
        elseif itemA:GetName() = "playerProjectile" and itemB:GetName() = "invisibleBarrier"
             foreground:Remove(itemA)
             activePlayerProjectileCount = activePlayerProjectileCount - 1    
@@ -353,11 +406,12 @@ class Main is Game, KeyboardListener, CollisionListener2D
     end
 
     action CreateInvisibleBlock(integer xPos, integer yPos) returns Drawable
-        Color yellowColor
-        yellowColor:SetColor(255, 255, 0, 255)        
+        Color blackColor
+        blackColor:SetColor(255, 255, 255, 255)        
 
         Drawable square
-        square:LoadFilledRectangle(5, 5, yellowColor)
+        
+        square:LoadFilledRectangle(5, 5, blackColor)
         square:SetPosition(xPos, yPos)
         square:SetCollidable(true)
         square:SetName("invisibleBarrier")
@@ -421,6 +475,7 @@ class Main is Game, KeyboardListener, CollisionListener2D
             projectile:SetLinearVelocity(vector)
             activePlayerProjectileCount = activePlayerProjectileCount + 1            
             spaceDown = true
+            laserAudio:Play()
         end
 
     end
@@ -463,7 +518,7 @@ class Main is Game, KeyboardListener, CollisionListener2D
             Drawable currentEnemy = enemyRow:Get(index)
             number xPos = currentEnemy:GetCenterX()
             number yPos = currentEnemy:GetY()
-            integer randomNum = random:RandomIntegerBetween(0, 250)
+            integer randomNum = random:RandomIntegerBetween(0, 180)
             boolean isEnemyBelow = false
 
             if enemyRowBelow not= undefined
@@ -538,6 +593,83 @@ class Main is Game, KeyboardListener, CollisionListener2D
         end
     end
 
+    action handleEnemyExplosions(Array<Drawable> enemyRow, number seconds, text imagePath) returns boolean
+        Layer2D foreground = layers:Get(1)
+        boolean foundExplodingEnemy = false
+        integer index = 0
+
+        repeat enemyRow:GetSize() times
+            Drawable enemy = enemyRow:Get(index)
+            JavaScriptObjectNotation enemyExplodingJson = enemy:GetProperty("exploding")
+            text isEnemyExplodingText = enemyExplodingJson:GetValue("data")
+            boolean isEnemyExploding = cast(boolean, isEnemyExplodingText)
+
+            if isEnemyExploding
+                foundExplodingEnemy = true
+                JavaScriptObjectNotation enemyExplodingTimeJson = enemy:GetProperty("explodingTime")
+                text enemyExplodingTimeText = enemyExplodingTimeJson:GetValue("data")
+                number enemyExplodingTime = cast(number, enemyExplodingTimeText)
+                enemyExplodingTime = enemyExplodingTime + seconds
+                JavaScriptObjectNotation updatedEnemyExplodingTimeJson
+                updatedEnemyExplodingTimeJson:Add("data", enemyExplodingTime)
+                enemy:SetProperty("explodingTime", updatedEnemyExplodingTimeJson)              
+
+                if enemyExplodingTime > 0.0 and enemyExplodingTime < 0.13
+                    enemy:Load("assets/explosion0.png")
+                elseif enemyExplodingTime > 0.13 and enemyExplodingTime < 0.26
+                    enemy:Load("assets/explosion1.png")
+                elseif enemyExplodingTime > 0.26 and enemyExplodingTime < 0.39
+                    enemy:Load("assets/explosion2.png")
+                elseif enemyExplodingTime > 0.39 and enemyExplodingTime < 0.52
+                    enemy:Load("assets/explosion3.png")
+                elseif enemyExplodingTime > 0.52 and enemyExplodingTime < 0.65
+                    enemy:Load("assets/explosion4.png")
+                elseif enemyExplodingTime > 0.65 and enemyExplodingTime < 0.75
+                    enemy:Load("assets/explosion5.png")
+                elseif enemyExplodingTime > 0.78
+                    foreground:Remove(enemy)
+                    enemy:Load(imagePath)
+                    enemy:SetCollidable(true)
+                    JavaScriptObjectNotation updatedEnemyExplodingJson
+                    updatedEnemyExplodingJson:Add("data", false)
+                    enemy:SetProperty("exploding", updatedEnemyExplodingJson)
+                    JavaScriptObjectNotation resetEnemyExplodingTimeJson
+                    resetEnemyExplodingTimeJson:Add("data", 0.0)
+                    enemy:SetProperty("explodingTime", resetEnemyExplodingTimeJson)
+        end    
+
+            end
+
+            index = index + 1
+        end
+        return foundExplodingEnemy
+    end
+
+    action handlePlayerExplosion(number seconds)
+
+        if activeExplosion
+            explosionSecs = explosionSecs + seconds
+        end        
+
+        if explosionSecs > 0.0 and explosionSecs < 0.13
+            player:Load("assets/explosion0.png")
+        elseif explosionSecs > 0.13 and explosionSecs < 0.26
+            player:Load("assets/explosion1.png")
+        elseif explosionSecs > 0.26 and explosionSecs < 0.39
+            player:Load("assets/explosion2.png")
+        elseif explosionSecs > 0.39 and explosionSecs < 0.52
+            player:Load("assets/explosion3.png")
+        elseif explosionSecs > 0.52 and explosionSecs < 0.65
+            player:Load("assets/explosion4.png")
+        elseif explosionSecs > 0.65 and explosionSecs < 0.75
+            player:Load("assets/explosion5.png")
+        elseif explosionSecs > 0.78
+            player:Load("assets/Spaceship4.png")
+            explosionSecs = 0.0
+            activeExplosion = false
+        end
+    end 
+
     /*
         The update action is called on every "frame" of animation in a game. This
         action should be used to do operations on items. So, for example, we 
@@ -548,8 +680,14 @@ class Main is Game, KeyboardListener, CollisionListener2D
         Random random
         boolean hasMoved = false
 
+        handlePlayerExplosion(seconds)
+        boolean foundExplodingEnemyRowOne = handleEnemyExplosions(rowOne, seconds,"assets/spaceship7.png")
+        boolean foundExplodingEnemyRowTwo = handleEnemyExplosions(rowTwo, seconds, "assets/spaceship5.png")
+        boolean foundExplodingEnemyRowThree = handleEnemyExplosions(rowThree, seconds, "assets/spaceship.png")
+
         if CheckIfRowAllInactive(rowOne) and CheckIfRowAllInactive(rowTwo)
-            and CheckIfRowAllInactive(rowThree)
+            and CheckIfRowAllInactive(rowThree) and not foundExplodingEnemyRowOne
+            and not foundExplodingEnemyRowTwo and not foundExplodingEnemyRowThree
             SetAllEnemiesInRowActive(rowOne, 400)
             SetAllEnemiesInRowActive(rowTwo, 450)
             SetAllEnemiesInRowActive(rowThree, 500)
@@ -564,7 +702,7 @@ class Main is Game, KeyboardListener, CollisionListener2D
         if totalSeconds >= nextMoveSecs and not gameOver
             MoveRows()
             hasMoved = true
-            nextMoveSecs = nextMoveSecs + 5
+            nextMoveSecs = nextMoveSecs + 10
         end
         
         if (nextMoveSecs - totalSeconds) >= 1 and not hasMoved and not gameOver
@@ -575,13 +713,13 @@ class Main is Game, KeyboardListener, CollisionListener2D
 
         if rightDown and not gameOver and player:GetX() < 750
             number rectX = player:GetX()
-            rectX = rectX + 4
+            rectX = rectX + 6
             player:SetX(rectX)
         end
 
         if leftDown and not gameOver and player:GetX() > 5
             number rectX = player:GetX()
-            rectX = rectX - 4
+            rectX = rectX - 6
             player:SetX(rectX)
         end
     end
