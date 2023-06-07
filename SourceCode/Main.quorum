@@ -17,6 +17,18 @@ use Libraries.Sound.Audio
 use Libraries.System.File
 use Libraries.Game.Graphics.ImageSheet
 
+/* ToDo
+   - Reorganize code to be more readable and reusable
+   - Add accerlation to player movement
+   - Give player an additional ship every 1000 points
+   - Add increasing difficulty with each wave of enemies
+       - Enemies shoot more frequently
+       - Enemies move faster down the screen and left to right
+   - Add left to right movement for enemies
+   - Add UFO going left to right at random interval
+   - Add movement animations to enemies
+*/
+
 /*
     This is a default class for creating a game in Quorum. Note that the Main 
     action begins by calling StartGame(), which loads a window a game can 
@@ -284,6 +296,9 @@ class Main is Game, KeyboardListener, CollisionListener2D
             foreground:Remove(itemB)
             activePlayerProjectileCount = activePlayerProjectileCount - 1
        elseif itemA:GetName() = "enemy" and itemB:GetName() = "player"
+            JavaScriptObjectNotation activeJson
+            activeJson:Add("data", false) 
+            itemA:SetProperty("active", activeJson)
             foreground:Remove(itemA)
             shipsRemainingInt = shipsRemainingInt - 1
             shipsRemainingLabel:SetText("Ships Remaining: " + shipsRemainingInt)
@@ -291,6 +306,9 @@ class Main is Game, KeyboardListener, CollisionListener2D
             activeExplosion = true
             explosionSecs = 0.0
        elseif itemA:GetName() = "player" and itemB:GetName() = "enemy"
+            JavaScriptObjectNotation activeJson
+            activeJson:Add("data", false) 
+            itemB:SetProperty("active", activeJson)
             foreground:Remove(itemB)
             shipsRemainingInt = shipsRemainingInt - 1
             shipsRemainingLabel:SetText("Ships Remaining: " + shipsRemainingInt)
