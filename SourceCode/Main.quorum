@@ -95,9 +95,6 @@ class Main is Game, KeyboardListener, CollisionListener2D
     end
 
     action SetupBoard()
-        JavaScriptObjectNotation json
-        json:Add("data", true)
-
         Layer2D foreground = layers:Get(1)
         Color color
         color:SetColor(255, 255, 255, 255)
@@ -115,11 +112,11 @@ class Main is Game, KeyboardListener, CollisionListener2D
         
         integer xPos = 25
         repeat 10 times
-            CreateEnemyForRow(foreground, json, rowThree, "assets/spaceship.png",
+            CreateEnemyForRow(foreground, rowThree, "assets/spaceship.png",
                                 xPos, 500)
-            CreateEnemyForRow(foreground, json, rowTwo, "assets/spaceship5.png",
+            CreateEnemyForRow(foreground, rowTwo, "assets/spaceship5.png",
                                 xPos, 450)
-            CreateEnemyForRow(foreground, json, rowOne, "assets/spaceship7.png",
+            CreateEnemyForRow(foreground, rowOne, "assets/spaceship7.png",
                                 xPos, 400)
             xPos = xPos + 75
         end
@@ -203,12 +200,14 @@ class Main is Game, KeyboardListener, CollisionListener2D
         end
     end
 
-    action CreateEnemyForRow(Layer2D layer, JavaScriptObjectNotation json, Array<Drawable> enemyRow,
+    action CreateEnemyForRow(Layer2D layer, Array<Drawable> enemyRow,
                         text iconPath, integer xPos, integer yPos) returns Array<Drawable>
             JavaScriptObjectNotation explodingJson
             explodingJson:Add("data", false)
             JavaScriptObjectNotation explodingTimeJson
             explodingTimeJson:Add("data", 0.0)
+            JavaScriptObjectNotation activeJson
+            activeJson:Add("data", true)
             Drawable enemy
             enemy:Load(iconPath)  
             enemy:SetPosition(xPos, yPos)
@@ -216,7 +215,7 @@ class Main is Game, KeyboardListener, CollisionListener2D
             enemy:Scale(0.75)
             enemy:SetRotation(180)
             enemy:SetName("enemy")
-            enemy:SetProperty("active", json)
+            enemy:SetProperty("active", activeJson)
             enemy:SetProperty("exploding", explodingJson)
             enemy:SetProperty("explodingTime", explodingTimeJson)
             layer:Add(enemy)
@@ -239,10 +238,10 @@ class Main is Game, KeyboardListener, CollisionListener2D
        
        if itemA:GetName() = "enemy" and itemB:GetName() = "playerProjectile"
             foreground:Remove(itemB)
-            JavaScriptObjectNotation json
-            json:Add("data", false) 
-            itemA:SetProperty("active", json)
-            itemB:SetProperty("active", json)
+            JavaScriptObjectNotation activeJson
+            activeJson:Add("data", false) 
+            itemA:SetProperty("active", activeJson)
+            itemB:SetProperty("active", activeJson)
             JavaScriptObjectNotation enemyExplodingJson
             enemyExplodingJson:Add("data", true)
             itemA:SetProperty("exploding", enemyExplodingJson)
@@ -253,10 +252,10 @@ class Main is Game, KeyboardListener, CollisionListener2D
             explosionAudio:Play()
        elseif itemA:GetName() = "playerProjectile" and itemB:GetName() = "enemy"
             foreground:Remove(itemA)
-            JavaScriptObjectNotation json
-            json:Add("data", false) 
-            itemA:SetProperty("active", json)
-            itemB:SetProperty("active", json)
+            JavaScriptObjectNotation activeJson
+            activeJson:Add("data", false) 
+            itemA:SetProperty("active", activeJson)
+            itemB:SetProperty("active", activeJson)
             JavaScriptObjectNotation enemyExplodingJson
             enemyExplodingJson:Add("data", true)
             itemB:SetProperty("exploding", enemyExplodingJson)
@@ -406,12 +405,12 @@ class Main is Game, KeyboardListener, CollisionListener2D
     end
 
     action CreateInvisibleBlock(integer xPos, integer yPos) returns Drawable
-        Color blackColor
-        blackColor:SetColor(255, 255, 255, 255)        
+        Color whiteColor
+        whiteColor:SetColor(255, 255, 255, 255)        
 
         Drawable square
         
-        square:LoadFilledRectangle(5, 5, blackColor)
+        square:LoadFilledRectangle(5, 5, whiteColor)
         square:SetPosition(xPos, yPos)
         square:SetCollidable(true)
         square:SetName("invisibleBarrier")
@@ -577,14 +576,14 @@ class Main is Game, KeyboardListener, CollisionListener2D
     end
 
     action SetAllEnemiesInRowActive(Array<Drawable> enemyRow, integer yPos)
-        JavaScriptObjectNotation json
-        json:Add("data", true) 
+        JavaScriptObjectNotation activeJson
+        activeJson:Add("data", true) 
         
         integer index = 0
         repeat enemyRow:GetSize() times
             Drawable enemy = enemyRow:Get(index)
             number xPos = enemy:GetX()
-            enemy:SetProperty("active", json)
+            enemy:SetProperty("active", activeJson)
             enemy:SetPosition(xPos, yPos)
             enemy:SetCollidable(true)
             Layer2D foreground = layers:Get(1)
